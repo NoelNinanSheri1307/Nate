@@ -1,0 +1,45 @@
+# ─── Virtual Environment ─────────────────────────────────
+venv/
+.venv/
+env/
+
+# ─── Environment Variables ───────────────────────────────
+.env
+
+# ─── Python Cache ────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ─── Logs ────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Models (large binary files) ─────────────────────────
+models/
+
+# ─── Audio Files ─────────────────────────────────────────
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# ─── IDE / Editor ────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── OS Files ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Misc ────────────────────────────────────────────────
+*.bak
+*.tmp
