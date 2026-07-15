@@ -101,20 +101,20 @@ def main() -> None:
     print("  Speak into your microphone. Recording will stop")
     print("  automatically after 1.5 seconds of silence.\n")
 
-    saved_path = recorder.record_until_silence(max_duration=15.0)
+    recording = recorder.record_until_silence(max_duration=15.0)
 
-    if not saved_path:
+    if not recording:
         print("\n  Recording failed or no audio captured.")
         return
 
     # ── Step 4: Save Confirmation ────────────────────────────────────────
     print(f"\n--- Step 5: Recording Saved ---")
-    print(f"  File: {saved_path}")
+    print(f"  File: {recording.file_path}")
 
     # ── Step 5: Playback ─────────────────────────────────────────────────
     print(f"\n--- Step 6: Playing Back Recording ---\n")
 
-    success = player.play_file(saved_path)
+    success = player.play_file(recording.file_path)
 
     if success:
         player.wait_until_finished(timeout=30.0)

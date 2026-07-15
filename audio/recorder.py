@@ -8,6 +8,7 @@ fixed-duration recording, and thread-safe operation.
 import os
 import threading
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 import sounddevice as sd
@@ -19,6 +20,20 @@ from utils.logger import setup_logger
 import config
 
 logger = setup_logger("nate.audio.recorder")
+
+
+@dataclass
+class AudioRecording:
+    """Result of a recording session.
+
+    Contains both the raw audio samples for in-memory processing
+    and the file path for debugging and playback.
+    """
+
+    samples: np.ndarray
+    sample_rate: int
+    duration: float
+    file_path: str
 
 
 @dataclass
@@ -133,11 +148,11 @@ class AudioRecorder:
                 self._is_recording = False
                 return False
 
-    def stop_recording(self) -> str | None:
+    def stop_recording(self) -> AudioRecording | None:
         """Stop the current recording and save to file.
 
         Returns:
-            Path to the saved WAV file, or None on error.
+            AudioRecording with samples and file path, or None on error.
         """
         with self._lock:
             if not self._is_recording:
@@ -168,21 +183,27 @@ class AudioRecorder:
 
                 duration = len(audio_data) / self._config.sample_rate
                 logger.info("Recording saved: %s (%.2fs)", output_path, duration)
-                return output_path
+
+                return AudioRecording(
+                    samples=audio_data,
+                    sample_rate=self._config.sample_rate,
+                    duration=duration,
+                    file_path=output_path,
+                )
 
             except Exception as exc:
                 logger.error("Failed to stop recording: %s", exc)
                 self._is_recording = False
                 return None
 
-    def record_fixed_duration(self, seconds: float) -> str | None:
+    def record_fixed_duration(self, seconds: float) -> AudioRecording | None:
         """Record for a fixed duration.
 
         Args:
             seconds: Duration to record in seconds.
 
         Returns:
-            Path to the saved WAV file, or None on error.
+            AudioRecording with samples and file path, or None on error.
         """
         logger.info("Recording for %.1f seconds...", seconds)
 
@@ -194,7 +215,7 @@ class AudioRecorder:
 
         return self.stop_recording()
 
-    def record_until_silence(self, max_duration: float = 30.0) -> str | None:
+    def record_until_silence(self, max_duration: float = 30.0) -> AudioRecording | None:
         """Record until VAD detects end of speech or max duration is reached.
 
         Requires a VoiceActivityDetector to be configured.
@@ -203,7 +224,7 @@ class AudioRecorder:
             max_duration: Maximum recording time in seconds (safety limit).
 
         Returns:
-            Path to the saved WAV file, or None on error.
+            AudioRecording with samples and file path, or None on error.
         """
         if self._vad is None:
             logger.error("VAD not configured — cannot record until silence")

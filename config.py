@@ -32,6 +32,13 @@ VAD_THRESHOLD: float = 0.5         # Silero VAD speech probability threshold
 SILENCE_DURATION: float = 1.0      # Seconds of silence before end-of-speech
 
 
+# ─── STT Settings ────────────────────────────────────────────────────────────
+
+STT_MODEL_SIZE: str = os.getenv("WHISPER_MODEL", os.getenv("STT_MODEL_SIZE", "small"))  # tiny, base, small, medium, large-v3
+STT_BEAM_SIZE: int = int(os.getenv("STT_BEAM_SIZE", "5"))
+
+
+
 # ─── LLM Settings (placeholders) ─────────────────────────────────────────────
 
 LLM_MODEL: str = "gemini-2.5-flash"

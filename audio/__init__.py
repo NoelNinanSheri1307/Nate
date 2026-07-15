@@ -11,7 +11,7 @@ from audio.devices import (
     get_default_input,
     get_default_output,
 )
-from audio.recorder import AudioRecorder
+from audio.recorder import AudioRecorder, AudioRecording
 from audio.player import AudioPlayer
 from audio.vad import VoiceActivityDetector
 from audio.latency import LatencyTracker
