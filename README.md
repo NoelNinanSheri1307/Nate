@@ -200,8 +200,8 @@ python -m utils.verify
 | Phase | Description                                    | Status      |
 |-------|------------------------------------------------|-------------|
 | 1     | Project initialization & environment setup     | Complete    |
-| 2     | Audio capture & Voice Activity Detection       | Planned     |
-| 3     | Speech-to-Text integration (Faster Whisper)    | Planned     |
+| 2     | Audio capture & Voice Activity Detection       | Complete     |
+| 3     | Speech-to-Text integration (Faster Whisper)    | Complete    |
 | 4     | LLM integration (Gemini 2.5 Flash)            | Planned     |
 | 5     | Text-to-Speech integration (Piper)            | Planned     |
 | 6     | Full pipeline assembly & latency optimization  | Planned     |
