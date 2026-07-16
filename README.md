@@ -1,192 +1,137 @@
-# Nate — Real-Time Conversational AI Assistant
+# Nate: Real-Time Conversational AI Assistant
 
-> Audio-In, Audio-Out conversational AI with sub-two-second end-to-end latency.
-
----
-
-## Overview
-
-**Nate** is a production-quality, real-time conversational AI assistant that listens through your microphone, understands your speech, generates intelligent responses via a large language model, and speaks back — all with a target latency of under two seconds.
-
-Built as a modular Python application, Nate demonstrates professional software engineering practices including clean architecture, comprehensive logging, and scalable module design.
-
----
-
-## Objectives
-
-- Build a fully functional voice-to-voice AI assistant pipeline
-- Achieve end-to-end latency under two seconds
-- Maintain production-quality code with modular, extensible architecture
-- Handle edge cases gracefully with intelligent fallback dialogue
-- Demonstrate real-world AI engineering skills
+Nate is a modular, real-time conversational voice assistant utilizing a pipelined audio architecture. It processes user speech, manages short-term memory context, generates responses via LLMs, and synthesizes natural-sounding speech feedback with low latency.
 
 ---
 
 ## Features
 
-### Planned
+### Speech & Audio Pipeline
+* **Voice Activity Detection**: Real-time silence and speech probability boundaries detection using Silero VAD.
+* **Speech-to-Text**: Low-latency transcription utilizing Faster-Whisper with automatic hardware acceleration (CUDA float16 when available, falling back to CPU int8).
+* **Text-to-Speech**: High-fidelity, localized speech synthesis using a persistent Piper TTS background subprocess via interactive JSON IPC.
+* **Continuous Playback**: Sentence-by-sentence queue-based audio playback system allowing natural pacing.
 
-- **Real-time microphone capture** — Continuous audio input via `sounddevice`
-- **Voice Activity Detection** — Intelligent speech endpoint detection using Silero VAD
-- **Speech-to-Text** — Fast, accurate transcription with Faster Whisper
-- **LLM Integration** — Contextual responses powered by Gemini 2.5 Flash
-- **Text-to-Speech** — Natural voice synthesis using Piper TTS
-- **Low Latency** — Optimized pipeline targeting < 2 second response time
-- **Fallback Dialogue** — Graceful handling of processing delays
-- **Structured Logging** — Colored console output with file logging support
+### Intelligence & Context
+* **Conversational Memory**: Stores conversation turns (user/assistant) and provides recent context history to the language model.
+* **Gemini LLM Integration**: Generates responses using Gemini Flash models with custom temperature, token limits, and reasoning budget disabled for minimal latency.
+* **Intelligent Fillers**: Plays localized background vocal fillers during remote LLM connection latency to improve conversation flow.
 
-### Current (Phase 1)
+### User Experience & Frontend
+* **Voice-First Design**: Minimal interface centered around natural speech interactions.
+* **Real-Time Visual Indicators**: OpenWebUI-inspired interface showing state transitions (Listening, Thinking, Streaming, Speaking, Wake word listening) via animated indicators.
+* **Collapsible Telemetry Panel**: A responsive sidebar showing active hardware details, engine latency profiles, and model characteristics.
 
-- Project structure and module scaffolding
-- Configuration management with environment variable loading
-- Dependency verification utility
-- Audio device detection
-- Reusable logging system
+### Infrastructure
+* **Streaming Architecture**: Employs async generators and WebSocket streams to push LLM text chunks and play audio fragments sentence-by-sentence before the response completes.
+* **Hardware Interruption**: Interrupts active audio synthesis and speakers playback instantly if the user clicks or speaks during responses.
 
 ---
 
 ## Architecture Overview
 
-```
-Microphone → VAD → STT (Faster Whisper) → LLM (Gemini 2.5 Flash) → TTS (Piper) → Speaker
+```mermaid
+graph TD
+    User([User]) -->|Microphone| Recorder[Audio Recorder / Silero VAD]
+    Detector[Wake Word Detector] -.->|Trigger Listen| Recorder
+    Recorder -->|Audio Array| STT[Faster-Whisper STT]
+    STT -->|Transcript| Memory[Memory Manager]
+    Memory -->|Prompt History| LLM[Gemini Client]
+    LLM -->|Text Chunks| PipeStream[Streaming Pipeline]
+    PipeStream -->|Sentence Buffering| TTS[Piper TTS]
+    TTS -->|WAV Chunks| Player[Audio Player]
+    Player -->|Speaker| User
 ```
 
-Each stage of the pipeline is encapsulated in its own module, enabling independent development, testing, and replacement of components.
+Each module operates independently under a unified session state manager, minimizing coupling between hardware capture, cloud endpoints, and local inference models.
+
+---
+
+## System Pipeline
+
+```
+Microphone → Wake Word Detection → Silero VAD → Faster-Whisper → Memory Store → Gemini LLM (Streaming) → Sentence Buffer → Piper TTS → Audio Queue Playback
+```
+
+1. **Idle State**: The assistant listens continuously for the "Hey Nate" wake phrase.
+2. **Recording**: When triggered, VAD monitors input and stops automatically after a configured period of silence.
+3. **Transcription**: The audio array is sent directly to Faster-Whisper.
+4. **LLM Querying**: The transcript is stored in memory and sent to Gemini.
+5. **Streaming Synthesis**: Complete sentences are split from the streaming LLM output and fed to the TTS queue.
+6. **Playback**: The audio plays while remaining text chunks are processed.
+
+---
+
+## Screenshots
+
+<div align="center">
+  <img src="assets/Nate Interaction.png" alt="Nate Interaction" width="800">
+  <p><em>Nate OpenWebUI-inspired conversational interface.</em></p>
+</div>
+
+<br>
+
+<div align="center">
+  <img src="assets/Entity Relationship.png" alt="Entity Relationship" width="800">
+  <p><em>High-level architecture and subsystem relationships.</em></p>
+</div>
 
 ---
 
 ## Technology Stack
 
-| Component              | Technology            |
-|------------------------|-----------------------|
-| Language               | Python 3.11+          |
-| Async Runtime          | asyncio, threading    |
-| Voice Activity Detection | Silero VAD          |
-| Speech Recognition     | Faster Whisper        |
-| Language Model         | Gemini 2.5 Flash API  |
-| Text-to-Speech         | Piper TTS             |
-| Audio I/O              | sounddevice, soundfile|
-| Configuration          | python-dotenv         |
-| Logging                | Python logging module |
-| Version Control        | Git                   |
+| Component | Technology |
+| :--- | :--- |
+| **Language** | Python 3.10+ |
+| **Backend Framework** | FastAPI, Uvicorn |
+| **Frontend Framework** | Next.js 16, React 19, TailwindCSS, Framer Motion |
+| **Voice Activity Detection** | Silero VAD |
+| **Speech Recognition** | Faster Whisper |
+| **Language Model** | Gemini 3.1 Flash Lite (via Google GenAI SDK) |
+| **Text-to-Speech** | Piper TTS |
+| **Wake Word Detection** | OpenWakeWord |
+| **Audio I/O** | Sounddevice, Soundfile, PyAudio |
 
 ---
 
-## Folder Structure
-
-```
-Nate/
-│
-├── app.py                  # Application entry point
-├── config.py               # Configuration and environment loading
-├── requirements.txt        # Python dependencies
-├── README.md               # Project documentation
-├── .gitignore              # Git ignore rules
-├── .env.example            # Environment variable template
-│
-├── audio/                  # Audio capture and playback
-│   └── __init__.py
-│
-├── stt/                    # Speech-to-text (Faster Whisper)
-│   └── __init__.py
-│
-├── llm/                    # LLM integration (Gemini)
-│   └── __init__.py
-│
-├── tts/                    # Text-to-speech (Piper)
-│   └── __init__.py
-│
-├── conversation/           # Conversation state management
-│   └── __init__.py
-│
-├── utils/                  # Shared utilities
-│   ├── __init__.py
-│   ├── logger.py           # Logging configuration
-│   └── verify.py           # Dependency verification
-│
-├── assets/                 # Static assets
-├── logs/                   # Runtime log files
-├── models/                 # Downloaded model files
-└── tests/                  # Unit and integration tests
-```
-
----
-
-## Setup Instructions
+## Installation & Setup
 
 ### 1. Clone the Repository
-
 ```bash
 git clone https://github.com/your-username/Nate.git
 cd Nate
 ```
 
-### 2. Create a Virtual Environment
-
+### 2. Create Virtual Environment
 ```bash
 python -m venv venv
 ```
 
 **Activate the environment:**
-
-- **Windows (PowerShell):**
+* **Windows (PowerShell):**
   ```powershell
   .\venv\Scripts\Activate.ps1
   ```
-- **Windows (CMD):**
-  ```cmd
-  venv\Scripts\activate.bat
-  ```
-- **macOS / Linux:**
+* **macOS / Linux:**
   ```bash
   source venv/bin/activate
   ```
 
 ### 3. Install Dependencies
-
 ```bash
 pip install -r requirements.txt
+pip install openwakeword
 ```
 
-### 4. Configure Environment Variables
-
-Copy the example environment file and add your API key:
-
-```bash
-cp .env.example .env
+### 4. Configure Environment
+Create a `.env` file in the root directory:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.1-flash-lite
+WHISPER_MODEL=small
 ```
 
-Edit `.env` and add your Gemini API key:
-
-```
-GEMINI_API_KEY=your_api_key_here
-```
-
-### 5. Run the Verification Script
-
-```bash
-python app.py
-```
-
-This will:
-- Display the Nate startup banner
-- Validate your configuration
-- Check that all required libraries are installed
-- Detect available audio devices
-- Report any issues
-
-You can also run verification standalone:
-
-```bash
-python -m utils.verify
-```
-
----
-
-## Piper TTS Setup
-
-The project uses Piper TTS for local, low-latency voice synthesis. The Piper runtime and default voice model are located in:
-
+Ensure the Piper executable and voice ONNX files are placed in:
 ```
 models/piper/
 ├── piper.exe
@@ -195,84 +140,56 @@ models/piper/
 └── espeak-ng-data/
 ```
 
-### Voice Configuration
-You can configure the active voice and paths in your `.env` file:
-
-```env
-DEFAULT_TTS_VOICE=en_US-joe-medium.onnx
-PIPER_MODEL_PATH=models/piper/en_US-joe-medium.onnx
-PIPER_EXECUTABLE_PATH=models/piper/piper.exe
-```
-
-To switch voices, download any supported ONNX voice from the Piper repository, place it in `models/piper/`, and update `DEFAULT_TTS_VOICE` and `PIPER_MODEL_PATH` in `.env`.
-
 ---
 
-## Running Tests
+## Running the Application
 
-### 1. Test Text-to-Speech (Piper Standalone)
-Verify voice synthesis and playback functionality:
-
-```bash
-python tests/test_tts.py
-```
-
-### 2. Run Integrated Pipeline
-Verify the entire voice pipeline (Audio capture -> VAD auto-stop -> Faster-Whisper STT -> Gemini LLM -> Piper TTS -> Speaker playback):
-
-```bash
-python tests/test_pipeline.py
-```
-
----
-
-## Running the Web Interface
-
-Nate features an interactive, OpenWebUI-inspired web frontend built with Next.js 15, React 19, TypeScript, TailwindCSS, and Framer Motion. 
-
-Follow these steps to run the complete voice assistant application locally:
-
-### 1. Launch the API Backend Server
-Start the FastAPI server from the project root:
-
+### 1. Start the Backend API Server
 ```bash
 uvicorn server:app --reload --port 8000
 ```
 
-### 2. Launch the Next.js Frontend
-Navigate to the `frontend/` directory, install node dependencies if needed, and run the developer server:
-
+### 2. Start the Frontend Dev Server
+In a new terminal window:
 ```bash
 cd frontend
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser to interact with Nate.
+Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ---
 
-## Roadmap
+## Usage
 
-| Phase | Description                                    | Status      |
-|-------|------------------------------------------------|-------------|
-| 1     | Project initialization & environment setup     | Complete    |
-| 2     | Audio capture & Voice Activity Detection       | Complete    |
-| 3     | Speech-to-Text integration (Faster Whisper)    | Complete    |
-| 4     | LLM integration (Gemini / Flash selection)     | Complete    |
-| 5     | Text-to-Speech integration (Piper)             | Complete    |
-| 6     | Conversational Intelligence Layer (Memory/V2)  | Complete    |
-| 7     | OpenWebUI-inspired Frontend Interface           | Complete    |
-| 8     | Testing, polish & final documentation           | Planned     |
+* **Wake Word Interaction**: Toggle the "Wake Word" button on the top header. Speak "Hey Nate" to activate listening.
+* **Manual Interaction**: Click the microphone button in the footer to start or stop a manual recording session.
+* **Diagnostics**: Click "Show Telemetry" in the header to view active model configurations and real-time processing latencies.
 
 ---
 
-## License
+## Performance Metrics
 
-This project is part of an AI Engineering internship assignment.  
-License to be determined.
+* **STT (Faster-Whisper)**: Typical transcription times are under 400ms on CUDA-compatible GPUs, and 800ms–1.5s on mid-tier CPUs.
+* **LLM (Gemini 3.1 Flash Lite)**: Time-to-first-chunk is typically 400–600ms.
+* **TTS (Piper ONNX)**: Sentence-level synthesis executes in less than 200ms, running faster than real-time playback.
+* **Audio Playback**: Immediate playback start under 50ms.
 
 ---
 
-<p align="center">
-  Built with Python & Next.js
-</p>
+## Project Roadmap
+
+* [x] VAD & Microphone Capture
+* [x] Faster-Whisper Integration
+* [x] Memory & Context Layer
+* [x] Gemini API Integration
+* [x] Piper Speech Synthesis
+* [x] Web Interface Scaffolding
+* [x] Streaming Text & TTS Pipeline
+* [x] Wake Word Support (OpenWakeWord)
+
+---
+
+## License & Credits
+
+Designed and built by Noel Ninan Sheri. All rights reserved.
