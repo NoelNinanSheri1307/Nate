@@ -62,7 +62,7 @@ def setup_logger(
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
     console_fmt = ColoredFormatter(
-        fmt="%(asctime)s │ %(levelname)s │ %(name)s │ %(message)s",
+        fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%H:%M:%S",
     )
     console_handler.setFormatter(console_fmt)
@@ -76,7 +76,7 @@ def setup_logger(
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_fmt = logging.Formatter(
-            fmt="%(asctime)s │ %(levelname)-8s │ %(name)s │ %(message)s",
+            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         file_handler.setFormatter(file_fmt)
