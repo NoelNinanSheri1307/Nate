@@ -60,3 +60,16 @@ class SpeechPlaybackCompletedEvent(PipelineEvent):
     """Fired when speech playback has finished."""
     wav_path: str
     duration_ms: float
+
+
+@dataclass(frozen=True)
+class ThinkingStartedEvent(PipelineEvent):
+    """Fired when Gemini generation begins."""
+    timestamp: float
+
+
+@dataclass(frozen=True)
+class ThinkingFinishedEvent(PipelineEvent):
+    """Fired when Gemini generation finishes."""
+    timestamp: float
+    duration_ms: float

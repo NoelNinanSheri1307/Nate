@@ -117,30 +117,44 @@ class GeminiClient:
 
         return text
 
-    def generate_response(self, prompt: str) -> AssistantResponse:
+    def generate_response(self, prompt: str | list[types.Content]) -> AssistantResponse:
         """Generate response from Gemini with retry logic and detailed latency measurement.
 
         Args:
-            prompt: User input transcript.
+            prompt: User input transcript string or list of Content objects.
 
         Returns:
             AssistantResponse dataclass.
         """
-        if not prompt or not prompt.strip():
-            logger.warning("Empty prompt received. Returning empty response.")
-            return AssistantResponse(
-                text="",
-                prompt_tokens=0,
-                response_tokens=0,
-                latency_ms=0.0
-            )
+        # Validate prompt input safely
+        if isinstance(prompt, str):
+            if not prompt or not prompt.strip():
+                logger.warning("Empty prompt received. Returning empty response.")
+                return AssistantResponse(text="", prompt_tokens=0, response_tokens=0, latency_ms=0.0)
+        else:
+            if not prompt:
+                logger.warning("Empty prompt list received. Returning empty response.")
+                return AssistantResponse(text="", prompt_tokens=0, response_tokens=0, latency_ms=0.0)
 
         # Check in-memory cache
+        cache_key = ""
         if self.enable_cache:
-            normalized_prompt = prompt.strip().lower()
-            if normalized_prompt in self._cache:
-                logger.info("Cache HIT for prompt: '%s'", prompt)
-                cached = self._cache[normalized_prompt]
+            if isinstance(prompt, str):
+                cache_key = prompt.strip().lower()
+            else:
+                parts = []
+                for content in prompt:
+                    role = content.role
+                    text_parts = []
+                    for part in content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            text_parts.append(part.text)
+                    parts.append(f"{role}:{''.join(text_parts)}")
+                cache_key = "|".join(parts).lower()
+
+            if cache_key in self._cache:
+                logger.info("Cache HIT for prompt key: '%s'", cache_key)
+                cached = self._cache[cache_key]
                 if self.tracker:
                     from audio.latency import TimerRecord
                     self.tracker._timers["Network Request"] = TimerRecord("Network Request", elapsed_ms=0.0)
@@ -229,8 +243,8 @@ class GeminiClient:
                     latency_ms=total_ms,
                 )
 
-                if self.enable_cache:
-                    self._cache[prompt.strip().lower()] = response_obj
+                if self.enable_cache and cache_key:
+                    self._cache[cache_key] = response_obj
 
                 return response_obj
 

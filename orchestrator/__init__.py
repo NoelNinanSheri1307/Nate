@@ -12,6 +12,8 @@ from orchestrator.events import (
     ResponseGeneratedEvent,
     SpeechSynthesizedEvent,
     SpeechPlaybackCompletedEvent,
+    ThinkingStartedEvent,
+    ThinkingFinishedEvent,
 )
 from orchestrator.session import ConversationSession
 from orchestrator.pipeline import Pipeline
@@ -26,6 +28,8 @@ __all__ = [
     "ResponseGeneratedEvent",
     "SpeechSynthesizedEvent",
     "SpeechPlaybackCompletedEvent",
+    "ThinkingStartedEvent",
+    "ThinkingFinishedEvent",
     "ConversationSession",
     "Pipeline",
 ]
