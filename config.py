@@ -47,10 +47,11 @@ LLM_TEMPERATURE: float = 0.7
 ENABLE_LLM_CACHE: bool = os.getenv("ENABLE_LLM_CACHE", "False").lower() in ("true", "1", "yes")
 
 
-# ─── TTS Settings (placeholders) ─────────────────────────────────────────────
+# ─── TTS Settings ────────────────────────────────────────────────────────────
 
-TTS_MODEL_PATH: str = os.path.join("models", "piper")
-TTS_SPEAKER: str = "default"
+DEFAULT_TTS_VOICE: str = os.getenv("DEFAULT_TTS_VOICE", "en_US-joe-medium.onnx")
+PIPER_MODEL_PATH: str = os.getenv("PIPER_MODEL_PATH", os.path.join("models", "piper", "en_US-joe-medium.onnx"))
+PIPER_EXECUTABLE_PATH: str = os.getenv("PIPER_EXECUTABLE_PATH", os.path.join("models", "piper", "piper.exe"))
 
 
 # ─── Logging ─────────────────────────────────────────────────────────────────

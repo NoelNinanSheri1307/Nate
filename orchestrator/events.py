@@ -45,3 +45,18 @@ class ResponseGeneratedEvent(PipelineEvent):
     """Fired when Gemini generation is complete."""
     text: str
     latency_ms: float
+
+
+@dataclass(frozen=True)
+class SpeechSynthesizedEvent(PipelineEvent):
+    """Fired when Piper speech synthesis is complete."""
+    wav_path: str
+    text: str
+    latency_ms: float
+
+
+@dataclass(frozen=True)
+class SpeechPlaybackCompletedEvent(PipelineEvent):
+    """Fired when speech playback has finished."""
+    wav_path: str
+    duration_ms: float

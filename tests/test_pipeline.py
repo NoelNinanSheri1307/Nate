@@ -19,6 +19,8 @@ from audio.vad import VoiceActivityDetector
 from audio.latency import LatencyTracker
 from stt.whisper_engine import WhisperEngine
 from llm.gemini_client import GeminiClient
+from tts.piper_engine import PiperEngine
+from tts.player import TTSPlayer
 from orchestrator.session import ConversationSession
 from orchestrator.pipeline import Pipeline
 from orchestrator.events import PipelineEvent
@@ -30,7 +32,7 @@ logger = setup_logger("nate.test.pipeline", level="DEBUG")
 def main() -> None:
     """Run the pipeline integration test."""
     print("\n" + "=" * 60)
-    print("  NATE — Phase 4 Pipeline Orchestrator Test")
+    print("  NATE — Phase 5 Pipeline Orchestrator Test")
     print("=" * 60)
 
     # ── Verify config ────────────────────────────────────────────────────
@@ -47,8 +49,7 @@ def main() -> None:
 
     session.register_listener(event_logger)
 
-    # ── Step 1: Initialize Engines ───────────────────────────────────────
-    print("\n--- Step 1: Loading Whisper & VAD Models ---\n")
+    print("\n--- Step 1: Loading Whisper, VAD & Piper Models ---\n")
     vad = VoiceActivityDetector(threshold=0.5, silence_duration=1.5)
     
     rec_config = RecordingConfig(
@@ -66,12 +67,19 @@ def main() -> None:
 
     whisper = WhisperEngine(latency_tracker=tracker)
     gemini = GeminiClient(latency_tracker=tracker)
+    
+    piper = PiperEngine(latency_tracker=tracker)
+    piper.initialize()
+    
+    player = TTSPlayer(latency_tracker=tracker)
 
     pipeline = Pipeline(
         whisper_engine=whisper,
         gemini_client=gemini,
         session=session,
         latency_tracker=tracker,
+        piper_engine=piper,
+        tts_player=player,
     )
 
     # ── Step 2: Record ───────────────────────────────────────────────────
@@ -110,7 +118,9 @@ def main() -> None:
     print("\n--- Step 5: Latency Summary ---")
     tracker.summary()
 
-    print("\n  Phase 4 integration test complete.\n")
+    # Clean up tts engine
+    piper.shutdown()
+    print("\n  Phase 5 integration test complete.\n")
 
 
 if __name__ == "__main__":

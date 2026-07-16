@@ -183,15 +183,46 @@ python -m utils.verify
 
 ---
 
-## Current Development Phase
+## Piper TTS Setup
 
-### Phase 1 — Project Initialization & Environment Setup (Complete)
+The project uses Piper TTS for local, low-latency voice synthesis. The Piper runtime and default voice model are located in:
 
-- Project structure created
-- Configuration management implemented
-- Logging utility built
-- Dependency verification tool complete
-- README and documentation written
+```
+models/piper/
+├── piper.exe
+├── en_US-joe-medium.onnx
+├── en_US-joe-medium.onnx.json
+└── espeak-ng-data/
+```
+
+### Voice Configuration
+You can configure the active voice and paths in your `.env` file:
+
+```env
+DEFAULT_TTS_VOICE=en_US-joe-medium.onnx
+PIPER_MODEL_PATH=models/piper/en_US-joe-medium.onnx
+PIPER_EXECUTABLE_PATH=models/piper/piper.exe
+```
+
+To switch voices, download any supported ONNX voice from the Piper repository, place it in `models/piper/`, and update `DEFAULT_TTS_VOICE` and `PIPER_MODEL_PATH` in `.env`.
+
+---
+
+## Running Tests
+
+### 1. Test Text-to-Speech (Piper Standalone)
+Verify voice synthesis and playback functionality:
+
+```bash
+python tests/test_tts.py
+```
+
+### 2. Run Integrated Pipeline
+Verify the entire voice pipeline (Audio capture -> VAD auto-stop -> Faster-Whisper STT -> Gemini LLM -> Piper TTS -> Speaker playback):
+
+```bash
+python tests/test_pipeline.py
+```
 
 ---
 
@@ -200,11 +231,11 @@ python -m utils.verify
 | Phase | Description                                    | Status      |
 |-------|------------------------------------------------|-------------|
 | 1     | Project initialization & environment setup     | Complete    |
-| 2     | Audio capture & Voice Activity Detection       | Complete     |
+| 2     | Audio capture & Voice Activity Detection       | Complete    |
 | 3     | Speech-to-Text integration (Faster Whisper)    | Complete    |
-| 4     | LLM integration (Gemini 2.5 Flash)            | Planned     |
-| 5     | Text-to-Speech integration (Piper)            | Planned     |
-| 6     | Full pipeline assembly & latency optimization  | Planned     |
+| 4     | LLM integration (Gemini / Flash selection)     | Complete    |
+| 5     | Text-to-Speech integration (Piper)             | Complete    |
+| 6     | Full pipeline assembly & latency optimization  | Complete    |
 | 7     | Fallback dialogue & error handling             | Planned     |
 | 8     | Testing, polish & documentation                | Planned     |
 
