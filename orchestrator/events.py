@@ -48,6 +48,13 @@ class ResponseGeneratedEvent(PipelineEvent):
 
 
 @dataclass(frozen=True)
+class ResponseChunkEvent(PipelineEvent):
+    """Fired when a streaming chunk arrives from Gemini."""
+    chunk: str
+    accumulated: str
+
+
+@dataclass(frozen=True)
 class SpeechSynthesizedEvent(PipelineEvent):
     """Fired when Piper speech synthesis is complete."""
     wav_path: str
@@ -73,3 +80,10 @@ class ThinkingFinishedEvent(PipelineEvent):
     """Fired when Gemini generation finishes."""
     timestamp: float
     duration_ms: float
+
+
+@dataclass(frozen=True)
+class WakeWordDetectedEvent(PipelineEvent):
+    """Fired when the wake word is detected."""
+    keyword: str
+    confidence: float

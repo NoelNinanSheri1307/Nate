@@ -40,6 +40,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ messages, state }) => {
           <p className="text-xs text-secondary-text max-w-sm">
             A real-time voice-activated assistant. Say hello, ask questions, or chat naturally.
           </p>
+          {state === 'WAKE_LISTENING' && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-xs text-accent-glow mt-4 font-mono"
+            >
+              Listening for &quot;Hey Nate&quot;...
+            </motion.p>
+          )}
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
@@ -47,7 +56,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ messages, state }) => {
             <MessageBubble key={`${msg.timestamp}-${index}`} message={msg} />
           ))}
 
-          {/* Thinking / Processing indicator */}
+          {/* Thinking indicator */}
           <AnimatePresence>
             {state === 'THINKING' && (
               <motion.div
@@ -69,6 +78,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ messages, state }) => {
                     <span className="w-1.5 h-1.5 bg-accent-blue rounded-full animate-bounce"></span>
                   </span>
                 </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Streaming indicator (blinking cursor) */}
+          <AnimatePresence>
+            {state === 'STREAMING' && messages.length > 0 && messages[messages.length - 1]?.isStreaming && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2 pl-12 py-1 text-xs text-accent-glow font-mono"
+              >
+                <span className="inline-block w-2 h-4 bg-accent-blue animate-pulse rounded-sm"></span>
               </motion.div>
             )}
           </AnimatePresence>

@@ -264,3 +264,92 @@ class GeminiClient:
         logger.error("LLM generation failed after %d attempts. Last error: %s", retries, last_error)
         raise last_error or LLMError("LLM generation failed.")
 
+    def generate_response_stream(self, prompt: str | list[types.Content]):
+        """Stream response chunks from Gemini using the streaming API.
+
+        Args:
+            prompt: User input transcript string or list of Content objects.
+
+        Yields:
+            str: Each text chunk as it arrives from the model.
+
+        After iteration completes, the final AssistantResponse is available
+        via the .stream_result attribute set on this generator.
+        """
+        # Validate prompt input
+        if isinstance(prompt, str):
+            if not prompt or not prompt.strip():
+                return
+        else:
+            if not prompt:
+                return
+
+        gen_config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            max_output_tokens=self.config.max_output_tokens,
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        )
+
+        total_start = time.perf_counter()
+
+        try:
+            logger.debug("Starting streaming LLM generation...")
+            stream = self.client.models.generate_content_stream(
+                model=self.model_name,
+                contents=prompt,
+                config=gen_config,
+            )
+
+            accumulated = ""
+            prompt_tokens = 0
+            response_tokens = 0
+
+            for chunk in stream:
+                # Extract text from this chunk
+                chunk_text = ""
+                if hasattr(chunk, "text") and chunk.text:
+                    chunk_text = chunk.text
+                elif hasattr(chunk, "candidates") and chunk.candidates:
+                    for candidate in chunk.candidates:
+                        if hasattr(candidate, "content") and candidate.content:
+                            if hasattr(candidate.content, "parts") and candidate.content.parts:
+                                for part in candidate.content.parts:
+                                    if hasattr(part, "text") and part.text:
+                                        chunk_text += part.text
+
+                if chunk_text:
+                    accumulated += chunk_text
+                    yield chunk_text
+
+                # Extract token counts from final chunk usage metadata
+                if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                    if chunk.usage_metadata.prompt_token_count:
+                        prompt_tokens = chunk.usage_metadata.prompt_token_count
+                    if chunk.usage_metadata.candidates_token_count:
+                        response_tokens = chunk.usage_metadata.candidates_token_count
+
+            total_ms = (time.perf_counter() - total_start) * 1000.0
+
+            logger.info("Stream completed: %d chars, %.2f ms", len(accumulated), total_ms)
+
+            # Store final result for the caller to retrieve after iteration
+            self._last_stream_result = AssistantResponse(
+                text=accumulated.strip(),
+                prompt_tokens=prompt_tokens,
+                response_tokens=response_tokens,
+                latency_ms=total_ms,
+            )
+
+        except APIError as exc:
+            logger.error("Streaming API error: %s", exc)
+            raise LLMConnectionError(f"Gemini streaming API error: {exc}") from exc
+        except Exception as exc:
+            logger.error("Streaming error: %s", exc)
+            raise LLMError(f"Streaming error: {exc}") from exc
+
+    @property
+    def last_stream_result(self) -> Optional[AssistantResponse]:
+        """Get the AssistantResponse from the last completed stream."""
+        return getattr(self, "_last_stream_result", None)

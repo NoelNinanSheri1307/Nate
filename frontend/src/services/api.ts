@@ -51,4 +51,14 @@ export const api = {
     const res = await client.get('/latency');
     return res.data;
   },
+
+  async startWakeWord(): Promise<{ status: string }> {
+    const res = await client.post('/wakeword/start');
+    return res.data;
+  },
+
+  async stopWakeWord(): Promise<{ status: string }> {
+    const res = await client.post('/wakeword/stop');
+    return res.data;
+  },
 };

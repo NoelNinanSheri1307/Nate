@@ -8,6 +8,7 @@ manage conversational memory, play background filler speech, and track end-to-en
 import time
 import random
 import threading
+import queue
 from typing import Optional
 
 from audio.recorder import AudioRecording
@@ -21,6 +22,7 @@ from orchestrator.events import (
     RecordingStoppedEvent,
     TranscriptionCompletedEvent,
     ResponseGeneratedEvent,
+    ResponseChunkEvent,
     SpeechSynthesizedEvent,
     SpeechPlaybackCompletedEvent,
     ThinkingStartedEvent,
@@ -29,6 +31,7 @@ from orchestrator.events import (
 from tts.piper_engine import PiperEngine
 from tts.player import TTSPlayer
 from tts.fillers import FILLER_PHRASES
+from tts.sentence_splitter import StreamingSentenceBuffer
 from memory.manager import MemoryManager
 from utils.logger import setup_logger
 
@@ -78,6 +81,92 @@ class BackgroundFiller:
                 self.triggered = False
 
 
+class TTSQueue:
+    """Queue-based TTS worker for streaming sentence-by-sentence synthesis and playback.
+    
+    Sentences are enqueued as they arrive from the streaming LLM response.
+    A background worker thread synthesizes and plays them sequentially.
+    """
+
+    def __init__(self, piper: PiperEngine, player: TTSPlayer, session: ConversationSession) -> None:
+        self.piper = piper
+        self.player = player
+        self.session = session
+        self._queue: queue.Queue[Optional[str]] = queue.Queue()
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        """Start the background TTS worker thread."""
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread.start()
+
+    def enqueue(self, sentence: str) -> None:
+        """Add a sentence to the synthesis queue."""
+        self._queue.put(sentence)
+
+    def finish(self) -> None:
+        """Signal that no more sentences will be added and wait for completion."""
+        self._queue.put(None)  # Sentinel
+        if self._thread:
+            self._thread.join(timeout=30.0)
+
+    def interrupt(self) -> None:
+        """Interrupt current playback and drain the queue."""
+        self._stop_event.set()
+        # Drain remaining items
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        self._queue.put(None)  # Unblock worker
+        self.player.stop()
+        if self._thread:
+            self._thread.join(timeout=2.0)
+
+    def _worker(self) -> None:
+        """Background worker: synthesize and play sentences from the queue."""
+        first_sentence = True
+        while not self._stop_event.is_set():
+            try:
+                sentence = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            if sentence is None:
+                break  # Sentinel received
+
+            if self._stop_event.is_set():
+                break
+
+            try:
+                # Synthesize this sentence
+                wav_path = self.piper.synthesize(sentence)
+
+                if self._stop_event.is_set():
+                    break
+
+                # Transition to SPEAKING on first sentence
+                if first_sentence:
+                    self.session.set_state(AssistantState.SPEAKING)
+                    first_sentence = False
+
+                self.session.emit(
+                    SpeechSynthesizedEvent(
+                        wav_path=wav_path,
+                        text=sentence,
+                        latency_ms=0.0,
+                    )
+                )
+
+                # Play and block until this sentence finishes
+                self.player.play(wav_path, blocking=True)
+
+            except Exception as exc:
+                logger.error("TTS queue worker error: %s", exc)
+
 
 class Pipeline:
     """Coordinates STT and LLM pipelines and manages session state."""
@@ -110,8 +199,13 @@ class Pipeline:
         self.piper = piper_engine
         self.player = tts_player
         self.memory = memory_manager or MemoryManager(default_limit=8)
+        self._interrupt_event = threading.Event()
 
         logger.info("Pipeline Orchestrator initialized.")
+
+    def interrupt(self) -> None:
+        """Interrupt the current pipeline execution (e.g. user started speaking)."""
+        self._interrupt_event.set()
 
     def process_audio(self, audio_recording: AudioRecording) -> AssistantResponse:
         """Process an AudioRecording through the Whisper-Gemini-Piper pipeline.
@@ -156,31 +250,86 @@ class Pipeline:
         # Store user turn in memory
         self.memory.add_user_turn(transcript.text)
 
-        # ── Step 2: Language Model (Gemini) ──────────────────────────────
-        logger.debug("Routing transcript to Gemini Client...")
+        # ── Step 2: Streaming LLM Generation + Streaming TTS ─────────────
+        return self._streaming_generation()
+
+    def _streaming_generation(self) -> AssistantResponse:
+        """Run streaming LLM generation with sentence-level TTS.
+        
+        Returns:
+            AssistantResponse with full assembled text.
+        """
+        self._interrupt_event.clear()
+        
+        logger.debug("Routing transcript to Gemini Client (streaming)...")
         
         # Fire ThinkingStartedEvent and update session state
         thinking_start_time = time.time()
         self.session.emit(ThinkingStartedEvent(timestamp=thinking_start_time))
         self.session.set_state(AssistantState.THINKING)
 
-        # Start Background Filler Trigger
-        filler = None
+        # Start TTS queue worker if TTS available
+        tts_queue = None
         if self.piper is not None and self.player is not None:
-            filler = BackgroundFiller(self.piper, self.player)
-            filler.start()
+            tts_queue = TTSQueue(self.piper, self.player, self.session)
+            tts_queue.start()
 
+        sentence_buffer = StreamingSentenceBuffer()
+        accumulated_text = ""
         response = None
+
         try:
-            # Query LLM with memory history turns instead of raw text
+            # Query LLM with memory history turns using streaming
             history_contents = self.memory.get_history_for_gemini()
-            response = self.llm.generate_response(history_contents)
             
-            # Record assistant turn in memory upon successful generation
+            first_chunk = True
+            for chunk_text in self.llm.generate_response_stream(history_contents):
+                if self._interrupt_event.is_set():
+                    logger.info("Pipeline interrupted during streaming.")
+                    break
+
+                accumulated_text += chunk_text
+                
+                # Transition to STREAMING state on first chunk
+                if first_chunk:
+                    self.session.set_state(AssistantState.STREAMING)
+                    first_chunk = False
+
+                # Emit chunk event for frontend
+                self.session.emit(
+                    ResponseChunkEvent(
+                        chunk=chunk_text,
+                        accumulated=accumulated_text,
+                    )
+                )
+
+                # Feed to sentence buffer and enqueue complete sentences for TTS
+                if tts_queue:
+                    sentences = sentence_buffer.feed(chunk_text)
+                    for sentence in sentences:
+                        tts_queue.enqueue(sentence)
+
+            # Flush remaining buffered text
+            if tts_queue and not self._interrupt_event.is_set():
+                remaining = sentence_buffer.flush()
+                for sentence in remaining:
+                    tts_queue.enqueue(sentence)
+
+            # Get final response from the stream
+            response = self.llm.last_stream_result
+            if response is None:
+                response = AssistantResponse(
+                    text=accumulated_text.strip(),
+                    prompt_tokens=0,
+                    response_tokens=0,
+                    latency_ms=(time.time() - thinking_start_time) * 1000.0,
+                )
+
+            # Record assistant turn in memory
             self.memory.add_assistant_turn(response.text)
 
         except Exception as exc:
-            logger.error("LLM Generation failed: %s", exc)
+            logger.error("Streaming LLM Generation failed: %s", exc)
             self.session.set_state(AssistantState.ERROR)
             response = AssistantResponse(
                 text="I'm sorry, I'm having trouble connecting right now.",
@@ -200,10 +349,7 @@ class Pipeline:
                 )
             )
 
-            # Stop background filler if running
-            if filler is not None:
-                filler.stop()
-
+        # Emit final ResponseGeneratedEvent
         self.session.emit(
             ResponseGeneratedEvent(
                 text=response.text,
@@ -218,55 +364,24 @@ class Pipeline:
         logger.info("==========================================")
         logger.info("  Conversation Turn  : %d", self.memory.total_turns)
         logger.info("  Thinking Duration  : %.2f ms", thinking_duration_ms)
-        logger.info("  Filler Phrase Used : %s", filler.filler_phrase if (filler and filler.triggered) else "None")
         logger.info("  Memory Size        : %d turns", self.memory.total_turns)
         logger.info("  Prompt Tokens      : %d", response.prompt_tokens)
         logger.info("  Response Tokens    : %d", response.response_tokens)
-        logger.info("  Conversation Length: %d turns", self.memory.total_turns)
         logger.info("==========================================")
 
-        # ── Step 3: Text-to-Speech (Piper) & Playback ─────────────────────
-        if self.piper is not None:
-            try:
-                self.session.set_state(AssistantState.SPEAKING)
-                
-                # Synthesize Speech
-                synthesis_start = time.perf_counter()
-                wav_path = self.piper.synthesize(response.text)
-                synthesis_latency_ms = (time.perf_counter() - synthesis_start) * 1000.0
-                
-                self.session.emit(
-                    SpeechSynthesizedEvent(
-                        wav_path=wav_path,
-                        text=response.text,
-                        latency_ms=synthesis_latency_ms,
-                    )
+        # Wait for TTS queue to finish playing all sentences
+        if tts_queue:
+            if self._interrupt_event.is_set():
+                tts_queue.interrupt()
+            else:
+                tts_queue.finish()
+
+            self.session.emit(
+                SpeechPlaybackCompletedEvent(
+                    wav_path="",
+                    duration_ms=0.0,
                 )
-
-                # Play Speech
-                if self.player is not None:
-                    playback_start = time.perf_counter()
-                    
-                    # Measure start-of-playback latency using tracker if configured
-                    if self.tracker:
-                        self.tracker.start_timer("playback")
-
-                    # Perform blocking playback
-                    self.player.play(wav_path, blocking=True)
-                    
-                    playback_latency_ms = (time.perf_counter() - playback_start) * 1000.0
-
-                    self.session.emit(
-                        SpeechPlaybackCompletedEvent(
-                            wav_path=wav_path,
-                            duration_ms=playback_latency_ms,
-                        )
-                    )
-
-            except Exception as exc:
-                logger.error("TTS synthesis or playback failed: %s. Falling back to console output.", exc)
-                # Keep session in IDLE state on failure
-                self.session.set_state(AssistantState.IDLE)
+            )
 
         self.session.set_state(AssistantState.IDLE)
         logger.info("Pipeline processing completed successfully.")

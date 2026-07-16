@@ -25,19 +25,22 @@ from stt.whisper_engine import WhisperEngine
 from llm.gemini_client import GeminiClient
 from tts.piper_engine import PiperEngine
 from tts.player import TTSPlayer
+from tts.sentence_splitter import StreamingSentenceBuffer
 from memory.manager import MemoryManager
 from orchestrator.session import ConversationSession
-from orchestrator.pipeline import Pipeline
+from orchestrator.pipeline import Pipeline, TTSQueue
 from orchestrator.state import AssistantState
 from orchestrator.events import (
     PipelineEvent,
     RecordingStoppedEvent,
     TranscriptionCompletedEvent,
     ResponseGeneratedEvent,
+    ResponseChunkEvent,
     SpeechSynthesizedEvent,
     SpeechPlaybackCompletedEvent,
     ThinkingStartedEvent,
     ThinkingFinishedEvent,
+    WakeWordDetectedEvent,
 )
 from utils.logger import setup_logger
 
@@ -62,10 +65,13 @@ session: Optional[ConversationSession] = None
 memory: Optional[MemoryManager] = None
 piper: Optional[PiperEngine] = None
 player: Optional[TTSPlayer] = None
+wake_word_detector = None  # Will be set if openwakeword is available
 
 connected_websockets: List[WebSocket] = []
 recording_active = False
 recording_thread: Optional[threading.Thread] = None
+wake_word_active = False
+wake_word_thread: Optional[threading.Thread] = None
 
 
 class MessageRequest(BaseModel):
@@ -156,12 +162,36 @@ def startup_event() -> None:
         tts_player=player,
         memory_manager=memory
     )
+    
+    # Initialize wake word detector
+    _init_wake_word()
+    
     logger.info("Nate API backend fully initialized.")
+
+
+def _init_wake_word() -> None:
+    """Try to initialize OpenWakeWord for 'Hey Nate' detection."""
+    global wake_word_detector
+    try:
+        from wakeword.detector import WakeWordDetector
+        wake_word_detector = WakeWordDetector()
+        logger.info("Wake word detector initialized.")
+    except ImportError:
+        logger.warning("OpenWakeWord not installed. Wake word detection disabled. Run: pip install openwakeword")
+    except Exception as exc:
+        logger.warning("Wake word initialization failed: %s", exc)
 
 
 @app.on_event("shutdown")
 def shutdown_event() -> None:
     """Clean up resources on server shutdown."""
+    global wake_word_active
+    wake_word_active = False
+    if wake_word_detector:
+        try:
+            wake_word_detector.stop()
+        except Exception:
+            pass
     if piper:
         piper.shutdown()
     logger.info("Nate API backend shutdown complete.")
@@ -197,6 +227,10 @@ def stop_conversation():
     recording_active = False
     if recorder and recorder.is_recording:
         recorder._stop_event.set()
+
+    # Interrupt streaming pipeline
+    if pipeline:
+        pipeline.interrupt()
         
     if player:
         player.stop()
@@ -232,7 +266,8 @@ def run_voice_recording_loop() -> None:
         session.set_state(AssistantState.ERROR)
     finally:
         recording_active = False
-        session.set_state(AssistantState.IDLE)
+        if session.state != AssistantState.IDLE:
+            session.set_state(AssistantState.IDLE)
 
 
 @app.post("/conversation/record")
@@ -250,7 +285,7 @@ def record_turn():
 
 @app.post("/conversation/message")
 def text_message(req: MessageRequest):
-    """Fallback text chat interface mapping directly to conversational pipeline."""
+    """Text chat interface with streaming LLM and streaming TTS."""
     if not pipeline or not memory or not session:
         return {"status": "error", "message": "System not fully initialized."}
         
@@ -264,33 +299,69 @@ def text_message(req: MessageRequest):
     session.emit(ThinkingStartedEvent(timestamp=thinking_start))
     
     try:
-        # Get history turns and query Gemini
+        # Get history turns and use streaming Gemini
         history_contents = memory.get_history_for_gemini()
-        response = pipeline.llm.generate_response(history_contents)
-        memory.add_assistant_turn(response.text)
         
-        # Stop thinking and notify completed response
+        # Start TTS queue worker
+        tts_queue = None
+        if pipeline.piper and pipeline.player:
+            tts_queue = TTSQueue(pipeline.piper, pipeline.player, session)
+            tts_queue.start()
+        
+        sentence_buffer = StreamingSentenceBuffer()
+        accumulated_text = ""
+        first_chunk = True
+        
+        for chunk_text in pipeline.llm.generate_response_stream(history_contents):
+            accumulated_text += chunk_text
+            
+            if first_chunk:
+                session.set_state(AssistantState.STREAMING)
+                first_chunk = False
+            
+            # Emit chunk for frontend
+            session.emit(ResponseChunkEvent(chunk=chunk_text, accumulated=accumulated_text))
+            
+            # Feed to TTS sentence buffer
+            if tts_queue:
+                sentences = sentence_buffer.feed(chunk_text)
+                for sentence in sentences:
+                    tts_queue.enqueue(sentence)
+        
+        # Flush remaining
+        if tts_queue:
+            remaining = sentence_buffer.flush()
+            for sentence in remaining:
+                tts_queue.enqueue(sentence)
+        
+        # Get final response
+        response = pipeline.llm.last_stream_result
+        if response is None:
+            response_text = accumulated_text.strip()
+            latency_ms = (time.time() - thinking_start) * 1000.0
+        else:
+            response_text = response.text
+            latency_ms = response.latency_ms
+        
+        memory.add_assistant_turn(response_text)
+        
+        # Stop thinking
         thinking_duration = (time.time() - thinking_start) * 1000.0
         session.emit(ThinkingFinishedEvent(timestamp=time.time(), duration_ms=thinking_duration))
-        session.emit(ResponseGeneratedEvent(text=response.text, latency_ms=response.latency_ms))
+        session.emit(ResponseGeneratedEvent(text=response_text, latency_ms=latency_ms))
         
-        # Synthesize and play response
-        if pipeline.piper:
-            session.set_state(AssistantState.SPEAKING)
-            wav_path = pipeline.piper.synthesize(response.text)
-            session.emit(SpeechSynthesizedEvent(wav_path=wav_path, text=response.text, latency_ms=0.0))
-            
-            if pipeline.player:
-                pipeline.player.play(wav_path, blocking=True)
-                session.emit(SpeechPlaybackCompletedEvent(wav_path=wav_path, duration_ms=0.0))
+        # Wait for TTS to finish
+        if tts_queue:
+            tts_queue.finish()
+            session.emit(SpeechPlaybackCompletedEvent(wav_path="", duration_ms=0.0))
                 
         session.set_state(AssistantState.IDLE)
         return {
             "status": "success",
-            "reply": response.text,
-            "latency_ms": response.latency_ms,
-            "prompt_tokens": response.prompt_tokens,
-            "response_tokens": response.response_tokens
+            "reply": response_text,
+            "latency_ms": latency_ms,
+            "prompt_tokens": response.prompt_tokens if response else 0,
+            "response_tokens": response.response_tokens if response else 0
         }
     except Exception as exc:
         logger.error("Text message request failed: %s", exc)
@@ -322,13 +393,16 @@ def get_session_state():
 @app.get("/diagnostics")
 def get_diagnostics():
     """Fetch hardware and module properties."""
+    ww_status = "Active" if wake_word_active else ("Available" if wake_word_detector else "Unavailable")
     return {
         "session_state": session.state.name if session else "IDLE",
         "whisper_model": pipeline.whisper.model_size if pipeline else "small",
         "cuda_status": "CUDA Available" if torch.cuda.is_available() else "CPU Mode",
         "gemini_model": pipeline.llm.model_name if pipeline else "gemini-flash-latest",
         "piper_voice": pipeline.piper.config.voice if pipeline and pipeline.piper else "en_US-joe-medium.onnx",
-        "memory_size": memory.total_turns if memory else 0
+        "memory_size": memory.total_turns if memory else 0,
+        "wake_word": ww_status,
+        "streaming": True
     }
 
 
@@ -340,6 +414,108 @@ def get_latency():
         for k, v in tracker._timers.items():
             stats[k] = v.elapsed_ms
     return {"latency": stats}
+
+
+# ─── Wake Word Endpoints ─────────────────────────────────────────────────────
+
+@app.post("/wakeword/start")
+def start_wake_word():
+    """Start wake word detection loop."""
+    global wake_word_active, wake_word_thread
+    
+    if not wake_word_detector:
+        return {"status": "error", "message": "Wake word detector not available."}
+    
+    if wake_word_active:
+        return {"status": "already_active"}
+    
+    # Start the continuous background audio stream
+    try:
+        wake_word_detector.start()
+    except Exception as exc:
+        return {"status": "error", "message": f"Failed to start audio stream: {exc}"}
+        
+    wake_word_active = True
+    wake_word_thread = threading.Thread(target=_wake_word_loop, daemon=True)
+    wake_word_thread.start()
+    
+    if session:
+        session.set_state(AssistantState.WAKE_LISTENING)
+    
+    return {"status": "started"}
+
+
+@app.post("/wakeword/stop")
+def stop_wake_word():
+    """Stop wake word detection."""
+    global wake_word_active
+    wake_word_active = False
+    
+    if wake_word_detector:
+        try:
+            wake_word_detector.stop()
+        except Exception as exc:
+            logger.error("Error stopping wake word detector: %s", exc)
+        
+    if session and session.state == AssistantState.WAKE_LISTENING:
+        session.set_state(AssistantState.IDLE)
+    
+    return {"status": "stopped"}
+
+
+def _wake_word_loop() -> None:
+    """Background loop for wake word detection."""
+    global wake_word_active
+    
+    if not wake_word_detector or not session:
+        wake_word_active = False
+        return
+    
+    logger.info("Wake word detection started. Listening for 'Hey Nate'...")
+    
+    try:
+        while wake_word_active:
+            # Only listen when idle or wake_listening
+            if session.state not in (AssistantState.IDLE, AssistantState.WAKE_LISTENING):
+                import time as _time
+                _time.sleep(0.1)
+                continue
+            
+            result = wake_word_detector.listen_once(timeout=0.5)
+            
+            if result and wake_word_active:
+                logger.info("Wake word detected: '%s' (confidence=%.2f)", result.keyword, result.confidence)
+                session.emit(WakeWordDetectedEvent(keyword=result.keyword, confidence=result.confidence))
+                
+                # Stop the wake word stream to release the mic device for AudioRecorder
+                try:
+                    wake_word_detector.stop()
+                except Exception as exc:
+                    logger.error("Failed to stop detector for recording: %s", exc)
+
+                # Trigger conversation flow
+                session.set_state(AssistantState.IDLE)
+                run_voice_recording_loop()
+                
+                # Check if we should resume listening
+                if wake_word_active:
+                    try:
+                        wake_word_detector.start()
+                        session.set_state(AssistantState.WAKE_LISTENING)
+                    except Exception as exc:
+                        logger.error("Failed to restart detector: %s", exc)
+                        wake_word_active = False
+                        session.set_state(AssistantState.IDLE)
+                
+    except Exception as exc:
+        logger.error("Wake word loop error: %s", exc)
+    finally:
+        wake_word_active = False
+        try:
+            wake_word_detector.stop()
+        except Exception:
+            pass
+        logger.info("Wake word detection stopped.")
 
 
 @app.websocket("/ws")

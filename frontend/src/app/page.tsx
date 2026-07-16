@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from '../components/layout/Sidebar';
 import { ChatArea } from '../components/chat/ChatArea';
 import { DiagnosticsPanel } from '../components/diagnostics/DiagnosticsPanel';
@@ -9,7 +9,7 @@ import { MicButton } from '../components/controls/MicButton';
 import { api } from '../services/api';
 import { Message, SessionState, Diagnostics, LatencyStats } from '../types';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { Terminal, Activity } from 'lucide-react';
+import { Terminal, Activity, Ear } from 'lucide-react';
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -17,6 +17,8 @@ export default function Home() {
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [latency, setLatency] = useState<LatencyStats>({});
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(true);
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
+  const streamingRef = useRef(false);
 
   // Fetch metrics and history from REST API
   const fetchTelemetry = useCallback(async () => {
@@ -71,13 +73,63 @@ export default function Home() {
       case 'ThinkingStartedEvent':
         setSessionState('THINKING');
         break;
+
+      case 'ResponseChunkEvent':
+        // Streaming: progressively update the last assistant message
+        if (event.accumulated) {
+          setSessionState('STREAMING');
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === 'assistant' && last.isStreaming) {
+              // Update existing streaming message
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...last,
+                text: event.accumulated,
+              };
+              return updated;
+            } else {
+              // Create new streaming message
+              return [
+                ...prev,
+                {
+                  role: 'assistant',
+                  text: event.accumulated,
+                  timestamp: new Date().toISOString(),
+                  isStreaming: true,
+                }
+              ];
+            }
+          });
+          streamingRef.current = true;
+        }
+        break;
         
       case 'ResponseGeneratedEvent':
+        // Finalize the streaming message
         if (event.text) {
-          setMessages((prev) => [
-            ...prev,
-            { role: 'assistant', text: event.text, timestamp: new Date().toISOString() }
-          ]);
+          if (streamingRef.current) {
+            // Mark the streaming message as complete
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && updated[lastIdx].isStreaming) {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  text: event.text,
+                  isStreaming: false,
+                };
+              }
+              return updated;
+            });
+            streamingRef.current = false;
+          } else {
+            // Non-streaming fallback: add complete message
+            setMessages((prev) => [
+              ...prev,
+              { role: 'assistant', text: event.text, timestamp: new Date().toISOString() }
+            ]);
+          }
         }
         fetchTelemetry();
         break;
@@ -89,6 +141,11 @@ export default function Home() {
       case 'SpeechPlaybackCompletedEvent':
         setSessionState('IDLE');
         fetchTelemetry();
+        break;
+
+      case 'WakeWordDetectedEvent':
+        // Visual notification: wake word triggered
+        console.log('Wake word detected:', event.keyword);
         break;
         
       default:
@@ -115,6 +172,14 @@ export default function Home() {
       } catch (err) {
         console.error('Error stopping turn:', err);
       }
+    } else if (sessionState === 'STREAMING' || sessionState === 'SPEAKING') {
+      // Interrupt streaming/speaking
+      try {
+        await api.stopConversation();
+        setSessionState('IDLE');
+      } catch (err) {
+        console.error('Error interrupting:', err);
+      }
     } else {
       // Trigger voice turn record in background task
       try {
@@ -130,9 +195,24 @@ export default function Home() {
     try {
       await api.startConversation();
       setMessages([]);
+      streamingRef.current = false;
       fetchTelemetry();
     } catch (err) {
       console.error('Failed to reset session:', err);
+    }
+  };
+
+  const toggleWakeWord = async () => {
+    try {
+      if (wakeWordEnabled) {
+        await api.stopWakeWord();
+        setWakeWordEnabled(false);
+      } else {
+        await api.startWakeWord();
+        setWakeWordEnabled(true);
+      }
+    } catch (err) {
+      console.error('Wake word toggle failed:', err);
     }
   };
 
@@ -153,14 +233,28 @@ export default function Home() {
             <Terminal className="w-4 h-4 text-accent-blue" />
             <span className="text-xs font-mono text-secondary-text">Nate Session Console</span>
           </div>
-          {/* Toggle diagnostics sidebar */}
-          <button
-            onClick={() => setIsTelemetryOpen(!isTelemetryOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary-surface hover:bg-card-bg border border-border-line text-[10px] font-semibold text-secondary-text hover:text-primary-text transition-all cursor-pointer"
-          >
-            <Activity className="w-3.5 h-3.5" />
-            {isTelemetryOpen ? 'Hide Telemetry' : 'Show Telemetry'}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Wake word toggle */}
+            <button
+              onClick={toggleWakeWord}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-semibold transition-all cursor-pointer ${
+                wakeWordEnabled
+                  ? 'bg-accent-blue/20 border-accent-blue/50 text-accent-glow'
+                  : 'bg-secondary-surface hover:bg-card-bg border-border-line text-secondary-text hover:text-primary-text'
+              }`}
+            >
+              <Ear className="w-3.5 h-3.5" />
+              {wakeWordEnabled ? '"Hey Nate" Active' : 'Wake Word'}
+            </button>
+            {/* Toggle diagnostics sidebar */}
+            <button
+              onClick={() => setIsTelemetryOpen(!isTelemetryOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary-surface hover:bg-card-bg border border-border-line text-[10px] font-semibold text-secondary-text hover:text-primary-text transition-all cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              {isTelemetryOpen ? 'Hide Telemetry' : 'Show Telemetry'}
+            </button>
+          </div>
         </header>
 
         {/* Dynamic Chat messages */}
