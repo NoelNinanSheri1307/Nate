@@ -59,6 +59,8 @@ class GeminiClient:
         Falls back to the list of verified models if preferred is not found.
         """
         fallback_order = [
+            "gemini-3.1-flash-lite",
+            "gemini-flash-lite-latest",
             "gemini-flash-latest",
             "gemini-2.0-flash",
             "gemini-2.0-flash-001",

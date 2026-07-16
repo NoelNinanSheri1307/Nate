@@ -226,6 +226,31 @@ python tests/test_pipeline.py
 
 ---
 
+## Running the Web Interface
+
+Nate features an interactive, OpenWebUI-inspired web frontend built with Next.js 15, React 19, TypeScript, TailwindCSS, and Framer Motion. 
+
+Follow these steps to run the complete voice assistant application locally:
+
+### 1. Launch the API Backend Server
+Start the FastAPI server from the project root:
+
+```bash
+uvicorn server:app --reload --port 8000
+```
+
+### 2. Launch the Next.js Frontend
+Navigate to the `frontend/` directory, install node dependencies if needed, and run the developer server:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser to interact with Nate.
+
+---
+
 ## Roadmap
 
 | Phase | Description                                    | Status      |
@@ -235,9 +260,9 @@ python tests/test_pipeline.py
 | 3     | Speech-to-Text integration (Faster Whisper)    | Complete    |
 | 4     | LLM integration (Gemini / Flash selection)     | Complete    |
 | 5     | Text-to-Speech integration (Piper)             | Complete    |
-| 6     | Full pipeline assembly & latency optimization  | Complete    |
-| 7     | Fallback dialogue & error handling             | Planned     |
-| 8     | Testing, polish & documentation                | Planned     |
+| 6     | Conversational Intelligence Layer (Memory/V2)  | Complete    |
+| 7     | OpenWebUI-inspired Frontend Interface           | Complete    |
+| 8     | Testing, polish & final documentation           | Planned     |
 
 ---
 
@@ -249,5 +274,5 @@ License to be determined.
 ---
 
 <p align="center">
-  Built with Python
+  Built with Python & Next.js
 </p>

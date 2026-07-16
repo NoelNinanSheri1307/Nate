@@ -39,9 +39,9 @@ STT_BEAM_SIZE: int = int(os.getenv("STT_BEAM_SIZE", "5"))
 
 
 
-# ─── LLM Settings (placeholders) ─────────────────────────────────────────────
+# ─── LLM Settings ────────────────────────────────────────────────────────────
 
-LLM_MODEL: str = os.getenv("GEMINI_MODEL", os.getenv("LLM_MODEL", "gemini-3.5-flash"))
+LLM_MODEL: str = os.getenv("GEMINI_MODEL", os.getenv("LLM_MODEL", "gemini-3.1-flash-lite"))
 LLM_MAX_TOKENS: int = 256
 LLM_TEMPERATURE: float = 0.7
 ENABLE_LLM_CACHE: bool = os.getenv("ENABLE_LLM_CACHE", "False").lower() in ("true", "1", "yes")
