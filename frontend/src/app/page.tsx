@@ -9,7 +9,7 @@ import { MicButton } from '../components/controls/MicButton';
 import { api } from '../services/api';
 import { Message, SessionState, Diagnostics, LatencyStats } from '../types';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { Terminal, Activity, Ear } from 'lucide-react';
+import { Terminal, Activity, Ear, Menu } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Home() {
@@ -22,6 +22,7 @@ export default function Home() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('default');
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const streamingRef = useRef(false);
 
   // Fetch metrics and history from REST API
@@ -176,6 +177,9 @@ export default function Home() {
     fetchTelemetry();
     loadHistory();
     loadSessions();
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsTelemetryOpen(false);
+    }
   }, [fetchTelemetry, loadHistory, loadSessions]);
 
   // Start Voice Turn
@@ -233,23 +237,45 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-background text-primary-text overflow-hidden">
-      {/* 1. Left Sidebar */}
-      <Sidebar
-        onNewChat={handleNewSession}
-        onClearHistory={handleClearConversation}
-        conversationCount={messages.length}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        onSelectSession={handleSelectSession}
-        onDeleteSession={handleDeleteSession}
-      />
+    <div className="flex h-screen w-screen bg-background text-primary-text overflow-hidden relative">
+      {/* Sidebar Backdrop Overlay */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+        />
+      )}
+
+      {/* 1. Left Sidebar Container */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-primary-surface transition-transform duration-300 md:relative md:translate-x-0 ${
+        isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
+        <Sidebar
+          onNewChat={handleNewSession}
+          onClearHistory={handleClearConversation}
+          conversationCount={messages.length}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={(id) => {
+            handleSelectSession(id);
+            setIsSidebarOpen(false);
+          }}
+          onDeleteSession={handleDeleteSession}
+        />
+      </div>
 
       {/* 2. Middle Panel: Chat + Recording Waveform */}
       <main className="flex-1 flex flex-col h-full bg-background relative border-r border-border-line">
         {/* Top bar status */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border-line/60 bg-primary-surface/20">
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-1 -ml-1 text-secondary-text hover:text-primary-text md:hidden cursor-pointer"
+              title="Open Navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <Terminal className="w-4 h-4 text-accent-blue" />
             <span className="text-xs font-mono text-secondary-text">Nate Session Console</span>
           </div>
@@ -310,9 +336,28 @@ export default function Home() {
         </footer>
       </main>
 
+      {/* Telemetry Backdrop Overlay */}
+      {isTelemetryOpen && (
+        <div
+          onClick={() => setIsTelemetryOpen(false)}
+          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+        />
+      )}
+
       {/* 3. Right Sidebar: Telemetry & Logs */}
       {isTelemetryOpen && (
-        <DiagnosticsPanel diagnostics={diagnostics} latency={latency} />
+        <div className="fixed inset-y-0 right-0 z-50 w-80 transform bg-primary-surface transition-transform duration-300 md:relative md:translate-x-0">
+          {/* Close button for telemetry on mobile */}
+          <div className="absolute top-4 right-4 md:hidden z-10">
+            <button
+              onClick={() => setIsTelemetryOpen(false)}
+              className="text-secondary-text hover:text-primary-text font-bold text-lg bg-transparent border-0 cursor-pointer"
+            >
+              &times;
+            </button>
+          </div>
+          <DiagnosticsPanel diagnostics={diagnostics} latency={latency} />
+        </div>
       )}
 
       {/* Demo Mode Modal Overlay */}
