@@ -337,6 +337,8 @@ class Pipeline:
                 response_tokens=0,
                 latency_ms=0.0
             )
+            # Rollback last user turn if LLM generation fails to maintain alternation
+            self.memory.rollback_last_user_turn()
         finally:
             # Measure thinking duration
             thinking_duration_ms = (time.time() - thinking_start_time) * 1000.0

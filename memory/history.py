@@ -2,7 +2,7 @@
 Conversation history manager for storing and retrieving dialogue turns.
 """
 
-from typing import List
+from typing import List, Optional
 from memory.models import ConversationTurn
 
 
@@ -36,6 +36,12 @@ class ConversationHistory:
     def clear(self) -> None:
         """Clear all conversation history."""
         self._turns.clear()
+
+    def pop_turn(self) -> Optional[ConversationTurn]:
+        """Remove and return the last turn from the history."""
+        if self._turns:
+            return self._turns.pop()
+        return None
 
     @property
     def size(self) -> int:

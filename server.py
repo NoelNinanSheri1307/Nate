@@ -67,6 +67,38 @@ piper: Optional[PiperEngine] = None
 player: Optional[TTSPlayer] = None
 wake_word_detector = None  # Will be set if openwakeword is available
 
+sessions_registry = {}
+active_session_id = "default"
+
+
+def activate_session(session_id: str) -> None:
+    """Switch active session dynamically by updating global references and pipeline hooks."""
+    global session, memory, active_session_id
+    if session_id not in sessions_registry:
+        sess = ConversationSession(session_id=session_id)
+        sess.register_listener(SystemEventHandler())
+        mem = MemoryManager(default_limit=8)
+        sessions_registry[session_id] = {
+            "session": sess,
+            "memory": mem,
+            "name": "New Chat"
+        }
+    active_session_id = session_id
+    session = sessions_registry[session_id]["session"]
+    memory = sessions_registry[session_id]["memory"]
+    
+    if pipeline:
+        pipeline.session = session
+        pipeline.memory = memory
+
+
+def update_active_session_name(text: str) -> None:
+    """Update active session name dynamically based on first prompt input text."""
+    if active_session_id in sessions_registry:
+        if sessions_registry[active_session_id]["name"] == "New Chat":
+            shortened = text[:30] + "..." if len(text) > 30 else text
+            sessions_registry[active_session_id]["name"] = shortened
+
 connected_websockets: List[WebSocket] = []
 recording_active = False
 recording_thread: Optional[threading.Thread] = None
@@ -121,8 +153,9 @@ def startup_event() -> None:
     logger.info("Initializing Nate backend models...")
     
     tracker = LatencyTracker()
-    session = ConversationSession()
-    memory = MemoryManager(default_limit=8)
+    
+    # Initialize defaults via activate_session
+    activate_session("default")
     
     # Connect WebSocket Broadcaster to Event Listeners
     session.register_listener(SystemEventHandler())
@@ -260,6 +293,10 @@ def run_voice_recording_loop() -> None:
         if recording and recording_active:
             logger.info("Voice turn: Routing raw audio through Pipeline...")
             pipeline.process_audio(recording)
+            # Update name from transcription
+            turns = memory.get_all_turns()
+            if turns:
+                update_active_session_name(turns[-2].text)
             
     except Exception as exc:
         logger.error("Error in background voice turn loop: %s", exc)
@@ -293,6 +330,7 @@ def text_message(req: MessageRequest):
     
     # Store user turn
     memory.add_user_turn(req.message)
+    update_active_session_name(req.message)
     
     # Start thinking
     thinking_start = time.time()
@@ -366,6 +404,8 @@ def text_message(req: MessageRequest):
     except Exception as exc:
         logger.error("Text message request failed: %s", exc)
         session.set_state(AssistantState.ERROR)
+        if memory:
+            memory.rollback_last_user_turn()
         return {"status": "error", "message": str(exc)}
 
 
@@ -414,6 +454,57 @@ def get_latency():
         for k, v in tracker._timers.items():
             stats[k] = v.elapsed_ms
     return {"latency": stats}
+
+
+# ─── Sessions Endpoints ──────────────────────────────────────────────────────
+
+@app.get("/sessions")
+def get_sessions():
+    """List all sessions in the registry."""
+    result = []
+    for sid, info in sessions_registry.items():
+        result.append({
+            "id": sid,
+            "name": info["name"],
+            "turns": info["memory"].total_turns
+        })
+    return {"sessions": result, "active_id": active_session_id}
+
+
+@app.post("/sessions/new")
+def create_new_session():
+    """Create a new session and set it active."""
+    new_id = f"chat_{int(time.time())}"
+    activate_session(new_id)
+    return {"status": "created", "session_id": new_id, "name": "New Chat"}
+
+
+@app.post("/sessions/{session_id}/activate")
+def select_session(session_id: str):
+    """Activate an existing session."""
+    if session_id not in sessions_registry:
+        return {"status": "error", "message": "Session not found"}
+    activate_session(session_id)
+    return {"status": "activated", "session_id": session_id}
+
+
+@app.delete("/sessions/{session_id}")
+def delete_session(session_id: str):
+    """Delete a session from the registry."""
+    global active_session_id
+    if session_id == "default":
+        # Clear instead of delete
+        sessions_registry["default"]["memory"].clear()
+        sessions_registry["default"]["session"].clear_history()
+        sessions_registry["default"]["name"] = "New Chat"
+        return {"status": "cleared", "session_id": "default"}
+        
+    if session_id in sessions_registry:
+        del sessions_registry[session_id]
+        if active_session_id == session_id:
+            activate_session("default")
+        return {"status": "deleted", "active_id": active_session_id}
+    return {"status": "error", "message": "Session not found"}
 
 
 # ─── Wake Word Endpoints ─────────────────────────────────────────────────────

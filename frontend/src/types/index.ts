@@ -37,3 +37,9 @@ export interface PipelineEvent {
   keyword?: string;
   confidence?: number;
 }
+
+export interface SessionInfo {
+  id: string;
+  name: string;
+  turns: number;
+}

@@ -18,6 +18,8 @@ export default function Home() {
   const [latency, setLatency] = useState<LatencyStats>({});
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(true);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('default');
   const streamingRef = useRef(false);
 
   // Fetch metrics and history from REST API
@@ -39,6 +41,16 @@ export default function Home() {
       setMessages(histData.history);
     } catch (err) {
       console.error('Failed to load history:', err);
+    }
+  }, []);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const sessData = await api.getSessions();
+      setSessions(sessData.sessions);
+      setActiveSessionId(sessData.active_id);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
     }
   }, []);
 
@@ -132,6 +144,7 @@ export default function Home() {
           }
         }
         fetchTelemetry();
+        loadSessions();
         break;
         
       case 'SpeechSynthesizedEvent':
@@ -160,7 +173,8 @@ export default function Home() {
   useEffect(() => {
     fetchTelemetry();
     loadHistory();
-  }, [fetchTelemetry, loadHistory]);
+    loadSessions();
+  }, [fetchTelemetry, loadHistory, loadSessions]);
 
   // Start Voice Turn
   const handleMicClick = async () => {
@@ -193,12 +207,46 @@ export default function Home() {
 
   const handleNewSession = async () => {
     try {
-      await api.startConversation();
-      setMessages([]);
+      await api.createSession();
+      await loadSessions();
+      await loadHistory();
       streamingRef.current = false;
       fetchTelemetry();
     } catch (err) {
       console.error('Failed to reset session:', err);
+    }
+  };
+
+  const handleSelectSession = async (id: string) => {
+    try {
+      await api.activateSession(id);
+      await loadSessions();
+      await loadHistory();
+      fetchTelemetry();
+    } catch (err) {
+      console.error('Failed to select session:', err);
+    }
+  };
+
+  const handleDeleteSession = async (id: string) => {
+    try {
+      await api.deleteSession(id);
+      await loadSessions();
+      await loadHistory();
+      fetchTelemetry();
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  };
+
+  const handleClearConversation = async () => {
+    try {
+      await api.deleteSession(activeSessionId);
+      await loadSessions();
+      await loadHistory();
+      fetchTelemetry();
+    } catch (err) {
+      console.error('Failed to clear conversation:', err);
     }
   };
 
@@ -221,8 +269,12 @@ export default function Home() {
       {/* 1. Left Sidebar */}
       <Sidebar
         onNewChat={handleNewSession}
-        onClearHistory={handleNewSession}
+        onClearHistory={handleClearConversation}
         conversationCount={messages.length}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
       />
 
       {/* 2. Middle Panel: Chat + Recording Waveform */}

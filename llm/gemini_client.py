@@ -178,6 +178,8 @@ class GeminiClient:
         retries = self.config.max_retries
         backoff = 0.5
 
+        self._log_prompt(prompt)
+
         total_start = time.perf_counter()
 
         last_error = None
@@ -294,6 +296,8 @@ class GeminiClient:
 
         total_start = time.perf_counter()
 
+        self._log_prompt(prompt)
+
         try:
             logger.debug("Starting streaming LLM generation...")
             stream = self.client.models.generate_content_stream(
@@ -353,3 +357,52 @@ class GeminiClient:
     def last_stream_result(self) -> Optional[AssistantResponse]:
         """Get the AssistantResponse from the last completed stream."""
         return getattr(self, "_last_stream_result", None)
+
+    def _log_prompt(self, prompt: str | list[types.Content]) -> None:
+        """Log memory diagnostics and the complete prompt before sending to Gemini."""
+        print("========== MEMORY DEBUG ==========", flush=True)
+        if isinstance(prompt, str):
+            print("Current Turn Number: 1", flush=True)
+            print("Conversation Size: 1", flush=True)
+            print("Stored User Messages:", flush=True)
+            print(f"- {prompt}", flush=True)
+            print("Stored Assistant Messages: None", flush=True)
+            print("Prompt Sent To Gemini:", flush=True)
+            print(f"[System Prompt]: {SYSTEM_PROMPT}", flush=True)
+            print("\nConversation History\n", flush=True)
+            print(f"User:\n{prompt}", flush=True)
+        else:
+            conv_size = len(prompt)
+            print(f"Current Turn Number: {conv_size}", flush=True)
+            print(f"Conversation Size: {conv_size}", flush=True)
+            
+            user_msgs = [c.parts[0].text for c in prompt if c.role == "user" and c.parts and hasattr(c.parts[0], 'text')]
+            model_msgs = [c.parts[0].text for c in prompt if c.role == "model" and c.parts and hasattr(c.parts[0], 'text')]
+            
+            print("Stored User Messages:", flush=True)
+            for m in user_msgs:
+                print(f"- {m}", flush=True)
+            if not user_msgs:
+                print("None", flush=True)
+                
+            print("Stored Assistant Messages:", flush=True)
+            for m in model_msgs:
+                print(f"- {m}", flush=True)
+            if not model_msgs:
+                print("None", flush=True)
+                
+            print("Prompt Sent To Gemini:", flush=True)
+            print(f"[System Prompt]: {SYSTEM_PROMPT}", flush=True)
+            print("\nConversation History\n", flush=True)
+            
+            for content in prompt:
+                role = "User" if content.role == "user" else "Assistant"
+                text_parts = []
+                for part in content.parts:
+                    if hasattr(part, 'text') and part.text:
+                        text_parts.append(part.text)
+                text = "".join(text_parts)
+                print(f"{role}:\n{text}\n", flush=True)
+                
+        print("=================================", flush=True)
+

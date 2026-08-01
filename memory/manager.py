@@ -61,6 +61,13 @@ class MemoryManager:
         """Retrieve all turns stored in history."""
         return self._history.get_all()
 
+    def rollback_last_user_turn(self) -> None:
+        """Remove the last turn if it was a user turn to maintain alternation on failure."""
+        turns = self._history.get_all()
+        if turns and turns[-1].role == "user":
+            self._history.pop_turn()
+            logger.info("Rolled back last user turn due to failure (Total memory size: %d)", self._history.size)
+
     def clear(self) -> None:
         """Clear all stored conversation turns."""
         self._history.clear()

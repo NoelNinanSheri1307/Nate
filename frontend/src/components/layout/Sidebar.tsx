@@ -1,15 +1,28 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Search, MessageSquare, Info, LogOut } from 'lucide-react';
+import { Plus, Search, MessageSquare, Info, LogOut, Trash2 } from 'lucide-react';
+import { SessionInfo } from '../../types';
 
 interface SidebarProps {
   onNewChat: () => void;
   onClearHistory: () => void;
   conversationCount: number;
+  sessions: SessionInfo[];
+  activeSessionId: string;
+  onSelectSession: (id: string) => void;
+  onDeleteSession: (id: string) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onNewChat, onClearHistory, conversationCount }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  onNewChat,
+  onClearHistory,
+  conversationCount,
+  sessions,
+  activeSessionId,
+  onSelectSession,
+  onDeleteSession,
+}) => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   return (
@@ -50,17 +63,43 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewChat, onClearHistory, con
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto px-2 space-y-1">
         <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-secondary-text font-bold">
-          Active Chat
+          Saved Chats
         </div>
         
-        {conversationCount > 0 ? (
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-secondary-surface/40 border border-border-line/40 text-xs text-primary-text font-medium mx-2">
-            <MessageSquare className="w-4 h-4 text-accent-blue" />
-            <span className="truncate">Current Conversation ({conversationCount} turns)</span>
-          </div>
+        {sessions && sessions.length > 0 ? (
+          sessions.map((sess) => {
+            const isActive = sess.id === activeSessionId;
+            return (
+              <div
+                key={sess.id}
+                onClick={() => onSelectSession(sess.id)}
+                className={`group flex items-center justify-between px-3 py-2 rounded-lg border text-xs cursor-pointer transition-all mx-1 ${
+                  isActive
+                    ? 'bg-secondary-surface border-accent-blue/30 text-primary-text font-semibold'
+                    : 'bg-transparent border-transparent hover:bg-secondary-surface/40 text-secondary-text hover:text-primary-text'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-accent-blue' : 'text-secondary-text'}`} />
+                  <span className="truncate">{sess.name}</span>
+                </div>
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteSession(sess.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 text-secondary-text bg-transparent border-0 transition-opacity cursor-pointer"
+                  title={sess.id === 'default' ? "Clear Chat" : "Delete Chat"}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })
         ) : (
           <div className="px-6 py-4 text-xs text-secondary-text/60 italic text-center">
-            No messages logged
+            No chats started
           </div>
         )}
       </div>
