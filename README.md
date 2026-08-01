@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **Demo Branch Showcase**
-> This branch (`demo`) contains a statically compiled, network-free mockup of the Nate interface optimized for hosted portfolio deployments (e.g., Vercel).
+> This branch (`demo`) contains a statically compiled , network-free mockup of the Nate interface optimized for hosted portfolio deployments (e.g., Vercel).
 > 
 > **Why is the backend not hosted?**
 > The backend speech pipeline runs large machine learning models locally (including Silero VAD, Faster-Whisper STT, and Piper TTS ONNX). These models require high RAM footprints (exceeding standard 512MB free-tier hosting limits) and low-latency hardware access to your microphone and speaker. To run the live voice assistant experience, switch to the `main` branch and follow the local run instructions.
