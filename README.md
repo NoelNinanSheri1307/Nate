@@ -2,7 +2,10 @@
 
 > [!IMPORTANT]
 > **Demo Branch Showcase**
-> This branch (`demo`) contains a statically compiled, network-free mockup of the Nate interface optimized for hosted portfolio deployments (e.g., Vercel). All backend actions, API responses, and WebSocket events are simulated in-memory to showcase the frontend design, layout responsiveness, and setup documentation without running local microphone, Whisper, or Piper runtime dependencies. To run the live assistant, switch to the `main` branch.
+> This branch (`demo`) contains a statically compiled, network-free mockup of the Nate interface optimized for hosted portfolio deployments (e.g., Vercel).
+> 
+> **Why is the backend not hosted?**
+> The backend speech pipeline runs large machine learning models locally (including Silero VAD, Faster-Whisper STT, and Piper TTS ONNX). These models require high RAM footprints (exceeding standard 512MB free-tier hosting limits) and low-latency hardware access to your microphone and speaker. To run the live voice assistant experience, switch to the `main` branch and follow the local run instructions.
 
 Nate is a modular, real-time conversational voice assistant utilizing a pipelined audio architecture. It processes user speech, manages short-term memory context, generates responses via LLMs, and synthesizes natural-sounding speech feedback with low latency.
 

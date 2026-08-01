@@ -28,7 +28,7 @@ export default function SetupPage() {
         <section className="space-y-4">
           <h1 className="text-2xl font-bold text-white tracking-tight">Run Nate on Your Machine</h1>
           <p className="text-sm text-[#9EA6B2] leading-relaxed max-w-2xl font-sans">
-            Nate is built as a desktop-native voice assistant. Because it requires direct, low-latency access to your microphone, speaker, and local deep-learning inference models (Whisper STT, Piper TTS, and OpenWakeWord), it must be run locally to access the complete voice-to-voice experience.
+            Nate is built as a desktop-native voice assistant. Deep-learning speech models (Faster-Whisper STT, Piper TTS ONNX, and Silero VAD) are compute-intensive and require large RAM footprints that exceed standard cloud hosting limits (such as standard 512MB free-tier constraints). Additionally, a voice-to-voice workflow requires direct, low-latency access to your local microphone and speaker hardware. Therefore, the pipeline must run locally.
           </p>
         </section>
 
