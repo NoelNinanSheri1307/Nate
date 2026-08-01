@@ -203,7 +203,7 @@ def startup_event() -> None:
 
 
 def _init_wake_word() -> None:
-    """Try to initialize OpenWakeWord for 'Hey Nate' detection."""
+    """Try to initialize OpenWakeWord for 'Hey Jarvis' or 'Hey Mycroft' detection."""
     global wake_word_detector
     try:
         from wakeword.detector import WakeWordDetector
@@ -562,7 +562,7 @@ def _wake_word_loop() -> None:
         wake_word_active = False
         return
     
-    logger.info("Wake word detection started. Listening for 'Hey Nate'...")
+    logger.info("Wake word detection started. Listening for 'Hey Jarvis' or 'Hey Mycroft'...")
     
     try:
         while wake_word_active:

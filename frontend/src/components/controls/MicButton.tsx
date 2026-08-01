@@ -114,7 +114,7 @@ export const MicButton: React.FC<MicButtonProps> = ({ state, onClick }) => {
         {state === 'THINKING' && 'Thinking...'}
         {state === 'STREAMING' && 'Responding...'}
         {state === 'SPEAKING' && 'Speaking...'}
-        {state === 'WAKE_LISTENING' && 'Say "Hey Nate"'}
+        {state === 'WAKE_LISTENING' && 'Say "Hey Jarvis" or "Hey Mycroft"'}
         {state === 'ERROR' && 'Connection Error'}
       </span>
     </div>

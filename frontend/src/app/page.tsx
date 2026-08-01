@@ -10,6 +10,7 @@ import { api } from '../services/api';
 import { Message, SessionState, Diagnostics, LatencyStats } from '../types';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { Terminal, Activity, Ear } from 'lucide-react';
+import Link from 'next/link';
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -20,6 +21,7 @@ export default function Home() {
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('default');
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   const streamingRef = useRef(false);
 
   // Fetch metrics and history from REST API
@@ -167,7 +169,7 @@ export default function Home() {
   }, [fetchTelemetry]);
 
   // Connect to WebSocket endpoint
-  useWebSocket('ws://localhost:8000/ws', handleWsEvent);
+  // useWebSocket('ws://localhost:8000/ws', handleWsEvent);
 
   // Initialize and load data on mount
   useEffect(() => {
@@ -178,31 +180,7 @@ export default function Home() {
 
   // Start Voice Turn
   const handleMicClick = async () => {
-    if (sessionState === 'LISTENING') {
-      // Manual interrupt / stop
-      try {
-        await api.stopConversation();
-        setSessionState('IDLE');
-      } catch (err) {
-        console.error('Error stopping turn:', err);
-      }
-    } else if (sessionState === 'STREAMING' || sessionState === 'SPEAKING') {
-      // Interrupt streaming/speaking
-      try {
-        await api.stopConversation();
-        setSessionState('IDLE');
-      } catch (err) {
-        console.error('Error interrupting:', err);
-      }
-    } else {
-      // Trigger voice turn record in background task
-      try {
-        await api.recordTurn();
-      } catch (err) {
-        console.error('Error recording turn:', err);
-        setSessionState('ERROR');
-      }
-    }
+    setIsDemoModalOpen(true);
   };
 
   const handleNewSession = async () => {
@@ -251,17 +229,7 @@ export default function Home() {
   };
 
   const toggleWakeWord = async () => {
-    try {
-      if (wakeWordEnabled) {
-        await api.stopWakeWord();
-        setWakeWordEnabled(false);
-      } else {
-        await api.startWakeWord();
-        setWakeWordEnabled(true);
-      }
-    } catch (err) {
-      console.error('Wake word toggle failed:', err);
-    }
+    setIsDemoModalOpen(true);
   };
 
   return (
@@ -296,7 +264,7 @@ export default function Home() {
               }`}
             >
               <Ear className="w-3.5 h-3.5" />
-              {wakeWordEnabled ? '"Hey Nate" Active' : 'Wake Word'}
+              {wakeWordEnabled ? '"Hey Jarvis/Mycroft" Active' : 'Wake Word'}
             </button>
             {/* Toggle diagnostics sidebar */}
             <button
@@ -308,6 +276,24 @@ export default function Home() {
             </button>
           </div>
         </header>
+
+        {/* Interactive Demo Banner */}
+        <div className="mx-6 mt-4 p-4 bg-[#3B82F6]/10 border border-[#3B82F6]/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold text-[#60A5FA] uppercase tracking-wider">Interactive Demo</h4>
+            <p className="text-[11px] text-[#9EA6B2] leading-relaxed max-w-2xl font-sans">
+              This deployment showcases Nate&apos;s interface, architecture, and user experience.
+              The complete desktop assistant—including wake-word detection, local speech recognition, and low-latency voice synthesis—runs locally to leverage direct access to microphone and speaker hardware.
+              See the setup guide to run the full experience.
+            </p>
+          </div>
+          <Link
+            href="/setup"
+            className="flex-shrink-0 text-center px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-semibold rounded-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+          >
+            Run Locally
+          </Link>
+        </div>
 
         {/* Dynamic Chat messages */}
         <ChatArea messages={messages} state={sessionState} />
@@ -327,6 +313,62 @@ export default function Home() {
       {/* 3. Right Sidebar: Telemetry & Logs */}
       {isTelemetryOpen && (
         <DiagnosticsPanel diagnostics={diagnostics} latency={latency} />
+      )}
+
+      {/* Demo Mode Modal Overlay */}
+      {isDemoModalOpen && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4">
+          <div className="bg-primary-surface border border-border-line rounded-xl max-w-md w-full overflow-hidden shadow-2xl p-6 relative font-mono">
+            <button
+              onClick={() => setIsDemoModalOpen(false)}
+              className="absolute top-4 right-4 text-secondary-text hover:text-primary-text text-xl cursor-pointer bg-transparent border-0 font-bold"
+            >
+              &times;
+            </button>
+            <div className="space-y-6 text-left">
+              <div className="space-y-2">
+                <h3 className="text-sm font-bold text-[#60A5FA] uppercase tracking-wider">Voice Assistant Standby</h3>
+                <p className="text-xs text-[#9EA6B2] leading-relaxed font-sans">
+                  The voice assistant runs as a local desktop service to access your microphone and synthesize audio directly. Because this is a hosted showcase, voice interactions are disabled.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-2 pt-2">
+                <a
+                  href="https://github.com/NoelNinanSheri1307/Nate"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-center py-2.5 px-4 rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-semibold transition-all cursor-pointer"
+                >
+                  View GitHub
+                </a>
+                <Link
+                  href="/setup"
+                  onClick={() => setIsDemoModalOpen(false)}
+                  className="w-full text-center py-2.5 px-4 rounded-lg bg-secondary-surface hover:bg-card-bg border border-border-line text-xs font-semibold text-primary-text hover:text-[#60A5FA] transition-all cursor-pointer"
+                >
+                  Run Locally
+                </Link>
+                <a
+                  href="https://github.com/NoelNinanSheri1307/Nate/blob/main/README.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-center py-2.5 px-4 rounded-lg bg-[#181A1F] hover:bg-[#20242C] text-xs font-semibold text-secondary-text hover:text-primary-text transition-all cursor-pointer"
+                >
+                  Documentation
+                </a>
+                <a
+                  href="https://github.com/NoelNinanSheri1307/Nate/releases/tag/v1.0.0"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-center py-2.5 px-4 rounded-lg bg-[#181A1F] hover:bg-[#20242C] text-xs font-semibold text-secondary-text hover:text-primary-text transition-all cursor-pointer"
+                >
+                  Latest Release
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

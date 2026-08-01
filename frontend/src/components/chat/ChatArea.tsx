@@ -46,7 +46,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ messages, state }) => {
               animate={{ opacity: 1 }}
               className="text-xs text-accent-glow mt-4 font-mono"
             >
-              Listening for &quot;Hey Nate&quot;...
+              Listening for &quot;Hey Jarvis&quot; or &quot;Hey Mycroft&quot;...
             </motion.p>
           )}
         </div>

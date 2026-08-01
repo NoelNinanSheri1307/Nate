@@ -1,5 +1,9 @@
 # Nate: Real-Time Conversational AI Assistant
 
+> [!IMPORTANT]
+> **Demo Branch Showcase**
+> This branch (`demo`) contains a statically compiled, network-free mockup of the Nate interface optimized for hosted portfolio deployments (e.g., Vercel). All backend actions, API responses, and WebSocket events are simulated in-memory to showcase the frontend design, layout responsiveness, and setup documentation without running local microphone, Whisper, or Piper runtime dependencies. To run the live assistant, switch to the `main` branch.
+
 Nate is a modular, real-time conversational voice assistant utilizing a pipelined audio architecture. It processes user speech, manages short-term memory context, generates responses via LLMs, and synthesizes natural-sounding speech feedback with low latency.
 
 ---
@@ -53,7 +57,7 @@ Each module operates independently under a unified session state manager, minimi
 Microphone → Wake Word Detection → Silero VAD → Faster-Whisper → Memory Store → Gemini LLM (Streaming) → Sentence Buffer → Piper TTS → Audio Queue Playback
 ```
 
-1. **Idle State**: The assistant listens continuously for the "Hey Nate" wake phrase.
+1. **Idle State**: The assistant listens continuously for the "Hey Jarvis" or "Hey Mycroft" wake phrase.
 2. **Recording**: When triggered, VAD monitors input and stops automatically after a configured period of silence.
 3. **Transcription**: The audio array is sent directly to Faster-Whisper.
 4. **LLM Querying**: The transcript is stored in memory and sent to Gemini.
@@ -162,7 +166,7 @@ Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ## Usage
 
-* **Wake Word Interaction**: Toggle the "Wake Word" button on the top header. Speak "Hey Nate" to activate listening.
+* **Wake Word Interaction**: Toggle the "Wake Word" button on the top header. Speak "Hey Jarvis" or "Hey Mycroft" to activate listening.
 * **Manual Interaction**: Click the microphone button in the footer to start or stop a manual recording session.
 * **Diagnostics**: Click "Show Telemetry" in the header to view active model configurations and real-time processing latencies.
 

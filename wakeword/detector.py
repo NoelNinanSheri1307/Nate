@@ -1,7 +1,7 @@
 """
 Wake Word Detector using OpenWakeWord.
 
-Provides continuous background listening for the "Hey Nate" wake phrase
+Provides continuous background listening for the "Hey Jarvis" or "Hey Mycroft" wake phrase
 using a lightweight, CPU-friendly model with zero audio gaps.
 """
 
@@ -26,7 +26,7 @@ class WakeWordResult:
 
 
 class WakeWordDetector:
-    """OpenWakeWord-based wake word detector for 'Hey Nate'.
+    """OpenWakeWord-based wake word detector for 'Hey Jarvis' or 'Hey Mycroft'.
 
     Uses openwakeword library with pre-trained models for Mycroft/Jarvis
     to detect custom wake phrases continuously with zero audio gaps.
@@ -35,7 +35,7 @@ class WakeWordDetector:
     def __init__(
         self,
         wakeword_models: Optional[List[str]] = None,
-        threshold: float = 0.4,  # slightly lowered threshold to match "Hey Nate" phonetics
+        threshold: float = 0.4,  # slightly lowered threshold for default models
         sample_rate: int = 16000,
         chunk_size: int = 1280,
     ) -> None:
@@ -163,7 +163,7 @@ class WakeWordDetector:
                     if score >= self.threshold:
                         logger.info("Wake word match: %s (score=%.3f)", model_name, score)
                         self._detected_result = WakeWordResult(
-                            keyword="Hey Nate",
+                            keyword=model_name.replace("_v0.1", "").replace("_", " ").title(),
                             confidence=float(score),
                             timestamp=time.time()
                         )
